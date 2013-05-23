@@ -9,10 +9,10 @@
   },
   "variables": {
     "clang": 0,
-    "gcc_version": 44,
+    "gcc_version": 46,
     "host_arch": "x64",
     "node_install_npm": "true",
-    "node_prefix": "/",
+    "node_prefix": "",
     "node_shared_cares": "false",
     "node_shared_http_parser": "false",
     "node_shared_libuv": "false",
@@ -30,8 +30,8 @@
     "target_arch": "x64",
     "v8_enable_gdbjit": 0,
     "v8_no_strict_aliasing": 1,
-    "v8_use_snapshot": "false",
-    "nodedir": "/home/benjamin/.node-gyp/0.9.6",
+    "v8_use_snapshot": "true",
+    "nodedir": "/home/19567/.node-gyp/0.10.7",
     "copy_dev_lib": "true",
     "standalone_static_library": 1
   }

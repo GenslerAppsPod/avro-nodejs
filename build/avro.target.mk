@@ -29,10 +29,10 @@ CFLAGS_CC_Debug := \
 	-fexceptions
 
 INCS_Debug := \
-	-I/home/benjamin/.node-gyp/0.9.6/src \
-	-I/home/benjamin/.node-gyp/0.9.6/deps/uv/include \
-	-I/home/benjamin/.node-gyp/0.9.6/deps/v8/include \
-	-I/home/benjamin/Workspace/AvroNode/avrocpp/include
+	-I/home/19567/.node-gyp/0.10.7/src \
+	-I/home/19567/.node-gyp/0.10.7/deps/uv/include \
+	-I/home/19567/.node-gyp/0.10.7/deps/v8/include \
+	-I/home/19567/Workspace/avro-nodejs/avrocpp/include
 
 DEFS_Release := \
 	'-D_LARGEFILE_SOURCE' \
@@ -49,8 +49,7 @@ CFLAGS_Release := \
 	-m64 \
 	-O2 \
 	-fno-strict-aliasing \
-	-fno-tree-vrp \
-	-fno-tree-sink
+	-fno-tree-vrp
 
 # Flags passed to only C files.
 CFLAGS_C_Release :=
@@ -61,13 +60,14 @@ CFLAGS_CC_Release := \
 	-fexceptions
 
 INCS_Release := \
-	-I/home/benjamin/.node-gyp/0.9.6/src \
-	-I/home/benjamin/.node-gyp/0.9.6/deps/uv/include \
-	-I/home/benjamin/.node-gyp/0.9.6/deps/v8/include \
-	-I/home/benjamin/Workspace/AvroNode/avrocpp/include
+	-I/home/19567/.node-gyp/0.10.7/src \
+	-I/home/19567/.node-gyp/0.10.7/deps/uv/include \
+	-I/home/19567/.node-gyp/0.10.7/deps/v8/include \
+	-I/home/19567/Workspace/avro-nodejs/avrocpp/include
 
 OBJS := \
-	$(obj).target/$(TARGET)/avro.o
+	$(obj).target/$(TARGET)/node_avro.o \
+	$(obj).target/$(TARGET)/BufferedInputStream.o
 
 # Add to the list of files we specially track dependencies for.
 all_deps += $(OBJS)
@@ -97,16 +97,16 @@ LDFLAGS_Debug := \
 	-pthread \
 	-rdynamic \
 	-m64 \
-	-L/home/benjamin/Workspace/AvroNode/avrocpp/lib
+	-L/home/19567/Workspace/avro-nodejs/avrocpp/lib
 
 LDFLAGS_Release := \
 	-pthread \
 	-rdynamic \
 	-m64 \
-	-L/home/benjamin/Workspace/AvroNode/avrocpp/lib
+	-L/home/19567/Workspace/avro-nodejs/avrocpp/lib
 
 LIBS := \
-	/home/benjamin/Workspace/AvroNode/avrocpp/lib/libavrocpp.so
+	/home/19567/Workspace/avro-nodejs/avrocpp/lib/libavrocpp.so
 
 $(obj).target/avro.node: GYP_LDFLAGS := $(LDFLAGS_$(BUILDTYPE))
 $(obj).target/avro.node: LIBS := $(LIBS)
