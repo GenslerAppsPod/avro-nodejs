@@ -1,4 +1,5 @@
 #include "node_avro.h"
+#include "translate.h"
 
 namespace node {
 
@@ -19,7 +20,7 @@ static void After(uv_work_t* work_req, int status);
 static void OnError(Avro *ctx, Persistent<Value> callback, const char* error);
 static void OnSchema(Avro *ctx, const char* schema);
 static void OnDatum(Avro *ctx, Persistent<Value> callback, Handle<Value> datum);
-avro::GenericDatum DecodeV8(Avro *ctx, GenericDatum datum, Local<Value> object);
+void handleCallbacks(Avro *ctx, datumBaton *baton, const Arguments &args, int startPos);
 
 Handle<Value> Avro::New(const Arguments& args){
     HandleScope scope;
@@ -58,7 +59,7 @@ static void PrintResult(uv_async_t *handle, int status) {
     //test to see if we have an error;
     if(baton.errorMessage.empty()){
       //success
-      OnDatum(ctx, baton.onSuccess, Avro::DecodeAvro(baton.datum));
+      OnDatum(ctx, baton.onSuccess, DecodeAvro(baton.datum));
     }else{
       //print error message
       OnError(ctx, baton.onError, baton.errorMessage.c_str());
@@ -100,32 +101,9 @@ Handle<Value> Avro::QueueSchema(const Arguments &args){
 
   baton.schema = schema;
 
-
   // if args > 2 and args[1] is a function set our onSuccess  
-  if(args.Length() > 2 ){
-    if(args[1]->IsFunction()){
-      baton.onSuccess = Persistent<Function>::New(Handle<Function>::Cast(args[1]));
-    }else{
-      //error onSuccess must be a function
-      OnError(ctx, on_error, "onSuccess must be a callback function.");
-      return scope.Close(Undefined());
-    }
-  }else{
-    baton.onSuccess = on_datum;
-  }
+  handleCallbacks(ctx, &baton, args, 1);
 
-  // set onerror callback for the proccess struct 
-  if(args.Length() > 3 ){
-    if(args[2]->IsFunction()){
-      baton.onError = Persistent<Function>::New(Handle<Function>::Cast(args[2]));
-    }else{
-      OnError(ctx, on_error, "onError must be a callback function.");
-      return scope.Close(Undefined());
-    }
-    //error onSuccess must be a function
-  }else{
-    baton.onError = on_error;
-  }
   // ------------------------------------------------
   // lock section here adding to queue
   uv_mutex_lock(&ctx->queueLock_);
@@ -191,10 +169,13 @@ Handle<Value> Avro::DecodeFile(const Arguments &args) {
   HandleScope scope;
   Avro * ctx = ObjectWrap::Unwrap<Avro>(args.This());
 
-  if (args.Length() > 1) {
+  if (args.Length() < 1) {
     ThrowException(v8::Exception::TypeError(String::New("Wrong number of arguments")));
     return scope.Close(Undefined());
   }
+  datumBaton baton;
+    // if args > 2 and args[1] is a function set our onSuccess  
+  handleCallbacks(ctx, &baton, args, 1);
 
   if(args[0]->IsString()){
     // get the param
@@ -205,14 +186,17 @@ Handle<Value> Avro::DecodeFile(const Arguments &args) {
       ValidSchema schema = dfr.dataSchema();
       std::ostringstream oss(std::ios_base::out);
       schema.toJson(oss);
-      OnSchema(ctx, oss.str().c_str());
       avro::GenericDatum datum(dfr.dataSchema());
 
       while(dfr.read(datum)){
-        OnDatum(ctx, on_datum, DecodeAvro(datum));
+        OnDatum(ctx, baton.onSuccess, DecodeAvro(datum));
+      }
+      
+      if(baton.onSuccess->IsFunction()){
+        baton.onSuccess.Dispose();
       }
     }catch(std::exception &e){
-      OnError(ctx, on_error, e.what());
+      OnError(ctx, baton.onError, e.what());
     }
   }else{
     OnError(ctx, on_error, "Wrong Argument. Must be string for filename");
@@ -228,11 +212,13 @@ Handle<Value> Avro::DecodeFile(const Arguments &args) {
  */
 Handle<Value> Avro::DecodeDatum(const Arguments &args){
   HandleScope scope;
-  if(args.Length() > 2){
+  if(args.Length() != 2){
     ThrowException(v8::Exception::TypeError(String::New("Wrong number of arguments")));
     return scope.Close(Undefined());        
   }
 
+  // throws error if there is no Buffer instance for 
+  // args[1].
   if(args[0]->IsString()&&Buffer::HasInstance(args[1])){
     //create schema from string
     v8::String::Utf8Value schemaString(args[0]->ToString());
@@ -333,20 +319,27 @@ Handle<Value> Avro::EncodeDatum(const Arguments &args){
     compileJsonSchema(is, schema);
   }catch(std::exception &e){
     //TODO should send back the bad schema for user reference. 
-    OnError(ctx, on_error, e.what());
+    OnError(ctx, on_error, "Error: compiling schema for EncodeDatum");
     return scope.Close(Undefined());
   }
 
   Local<Value> object = args[1];
   avro::GenericDatum datum(schema);
-  datum = DecodeV8(ctx, datum, object);
+  datum = DecodeV8(datum, object);
 
   std::auto_ptr<avro::OutputStream> out = avro::memoryOutputStream();
-  avro::EncoderPtr e = avro::validatingEncoder(schema,
-         avro::binaryEncoder());
+  avro::EncoderPtr e = avro::validatingEncoder(schema, avro::binaryEncoder());
 
   e->init(*out);
-  avro::encode(*e, datum);
+
+  try{
+    avro::encode(*e, datum);
+  }catch(std::exception &e){
+    std::string error = e.what();
+    std::string errorMessage = error + *schemaString;
+    OnError(ctx, on_error, errorMessage.c_str());
+    return scope.Close(Array::New());
+  }
   //need to flush the bytes to the stream (aka out);
   e->flush();
 
@@ -418,236 +411,38 @@ static void After(uv_work_t* work_req, int status){
   HandleScope scope;
 }
 
-/**
- * converts a GenericDatum into a v8 object that can be passed back to javascript
- */
-Handle<Value> Avro::DecodeAvro(const avro::GenericDatum& datum){
-  Handle<Object> obj = Object::New();
-  //return this Object
-  switch(datum.type())
-  {
-    case avro::AVRO_RECORD:
-      {
-        const avro::GenericRecord& record = datum.value<avro::GenericRecord>();
-        const avro::NodePtr& node = record.schema();
-        Handle<Object> obj = Object::New();
-        for(uint i = 0; i<record.fieldCount(); i++){
-          //Add values
-          Local<String> datumName = String::New(node->nameAt(i).c_str(), node->nameAt(i).size());
-          const avro::GenericDatum& subDatum = record.fieldAt(i);
-          obj->Set(datumName, DecodeAvro(subDatum));
-        }
-        return obj;
-      }
-    case avro::AVRO_STRING:
-      return  String::New(
-        datum.value<std::string>().c_str(),
-        datum.value<std::string>().size()
-      );
-    case avro::AVRO_BYTES:
-      {
-        Local<Array> byteArray = Array::New();
-        const std::vector<uint8_t> &v = datum.value<std::vector<uint8_t> >();
-        for(int i = 0;i<v.size();i++){
-          byteArray->Set(i, Uint32::New(v[i]));
-        }
-        return byteArray;
-      }        
-    case avro::AVRO_INT:
-      return Number::New(datum.value<int>());
-    case avro::AVRO_LONG:
-      return Number::New(datum.value<long>());
-    case avro::AVRO_FLOAT:
-      return Number::New(datum.value<float>());
-    case avro::AVRO_DOUBLE:
-      return Number::New(datum.value<double>());
-    case avro::AVRO_BOOL:
-      return Boolean::New(datum.value<bool>());
-    case avro::AVRO_NULL:
-      return v8::Null();
-    case avro::AVRO_ARRAY:
-      {
-        const avro::GenericArray &genArray = datum.value<avro::GenericArray>();
-
-        const std::vector<avro::GenericDatum> &v = genArray.value();
-        Local<Array> datumArray = Array::New();
-        int i = 0;
-        for(std::vector<avro::GenericDatum>::const_iterator it = v.begin(); it != v.end(); ++it) {
-          const avro::GenericDatum &itDatum = * it;
-          datumArray->Set(i, DecodeAvro(itDatum));
-          i++;
-        }
-        return datumArray;
-      }
-    case avro::AVRO_MAP:
-      {
-        const avro::GenericMap &genMap = datum.value<avro::GenericMap>();
-
-        const std::vector < std::pair < std::string, avro::GenericDatum > > &v = genMap.value();
-        Local<Array> datumArray = Array::New();
-        int i = 0;
-        for(std::vector< std::pair < std::string, avro::GenericDatum> >::const_iterator it = v.begin(); it != v.end(); ++it) {
-          const std::pair < std::string, avro::GenericDatum> &itDatum = * it;
-          datumArray->Set(String::New(
-            itDatum.first.c_str(),
-            itDatum.first.size()
-            ),DecodeAvro(itDatum.second));
-
-          i++;
-        }
-        return datumArray;
-      }
-    //Unimplemented avro types
-    case avro::AVRO_UNION:
-
-    case avro::AVRO_FIXED:
-
-    case avro::AVRO_ENUM:
-
-    case avro::AVRO_SYMBOLIC:
-
-    case avro::AVRO_UNKNOWN:
-
-    default:
-      {
-        printf("%d\n", datum.type());
-        return obj;
-      }
-  }
-
-}
 
 /**
- * [DecodeV8 description]
- * @param  ctx    [The avro context object for error handling.]
- * @param  datum  [The datum that is being built up for return.]
- * @param  object [The Javascript object that is being converted to a GenericDatum]
- * @return        [description]
+ * Parses out the two callbacks for the arguments. It is assumed that they are 
+ * defined in pairs. OnSuccess, OnError.  
+ * @param ctx              [Our Avro Object]
+ * @param baton            [the baton we're setting the callbacks on]
+ * @param args             [The arguments]
+ * @param startingPosition [The starting position to look for the callbacks in the Arugments]
  */
-avro::GenericDatum DecodeV8(Avro *ctx, GenericDatum datum, Local<Value> object){
-
-  switch(datum.type())
-  {
-    case avro::AVRO_RECORD:
-      {
-        if(object->IsObject()){
-          Local<Object> obj = object->ToObject();
-          const avro::GenericRecord& record = datum.value<avro::GenericRecord>();
-          const avro::NodePtr& node = record.schema();
-          
-          for(uint i = 0; i<record.fieldCount(); i++){
-            //Add values
-            Local<String> datumName = String::New(node->nameAt(i).c_str(), node->nameAt(i).size());
-            datum.value<avro::GenericRecord>().fieldAt(i) = DecodeV8(ctx, record.fieldAt(i), obj->Get(datumName));
-          }
-        }else{
-          OnError(ctx, on_error, "ERROR: Encoding AVRO_RECORD does not match javascript object.");
-        }
-      }
-      break;
-    case avro::AVRO_STRING:
-      if(object->IsString()){
-        v8::String::Utf8Value avroString(object->ToString());
-        datum.value<std::string>() = *avroString;
-      }else{
-        OnError(ctx, on_error, "ERROR: Encoding AVRO_STRING does not match javascript object.");
-      }
-      break;
-    case avro::AVRO_BYTES:
-      {
-
-        if(object->IsObject()){
-          Local<Object> array = object->ToObject();
-          //get length of buffer
-          int len = Buffer::Length(array);
-          uint8_t *in = reinterpret_cast<uint8_t*>(Buffer::Data(array));
-          std::vector<uint8_t> bytes;
-          bytes.insert(bytes.end(), in, in+len);
-          datum.value<std::vector<uint8_t> >() = bytes;
-        }else{
-          OnError(ctx, on_error, "ERROR: Encoding AVRO_BYTES does not match javascript object (must be Buffer object).");
-        }
-      }
-      break;       
-    case avro::AVRO_INT:
-      if(object->IsInt32()){
-        datum.value<int32_t>() = object->Int32Value() ;
-      }else{
-        OnError(ctx, on_error, "ERROR: Encoding AVRO_INT does not match javascript object.");
-      }
-      break;       
-    case avro::AVRO_LONG:
-      if(object->IsUint32()){
-        datum.value<int64_t>() = object->IntegerValue() ;
-      }else{
-        OnError(ctx, on_error, "ERROR: Encoding AVRO_LONG does not match javascript object.");
-      }
-      break;       
-    case avro::AVRO_FLOAT:
-      if(object->IsNumber()){
-        datum.value<float>() = static_cast<float>(object->NumberValue());
-      }else{
-        OnError(ctx, on_error, "ERROR: Encoding AVRO_FLOAT does not match javascript object.");
-      }
-      break;       
-    case avro::AVRO_DOUBLE:
-      if(object->IsNumber()){
-        datum.value<double>() = object->NumberValue();
-      }else{
-        OnError(ctx, on_error, "ERROR: Encoding AVRO_DOUBLE does not match javascript object.");
-      }
-      break;       
-    case avro::AVRO_BOOL:
-      if(object->IsBoolean()){
-        datum.value<bool>() = object->ToBoolean()->Value();
-      }else{
-        OnError(ctx, on_error, "ERROR: Encoding AVRO_BOOL does not match javascript object.");
-      }
-      break;
-    case avro::AVRO_NULL:
-      break;       
-    case avro::AVRO_ARRAY:
-      OnError(ctx, on_error, "ERROR: Encoding AVRO_ARRAY not implemented.");
-      break;
-    case avro::AVRO_MAP:
-      {
-        if(object->IsObject()){
-          Local<Object> map = object->ToObject();
-          avro::GenericMap &genMap = datum.value<avro::GenericMap>();
-          const avro::NodePtr& node = genMap.schema();
-          //gets the second value of the map. The first is always string as defined by avro
-          GenericDatum mapped(node->leafAt(1));
-          Local<Array> propertyNames = map->GetPropertyNames();
-          std::vector < std::pair < std::string, avro::GenericDatum > > &v = genMap.value();;
-          for(int i = 0;i<propertyNames->Length();i++){
-            Local<String> key = propertyNames->Get(i)->ToString();
-            v8::String::Utf8Value propertyName(key);
-            std::pair<std::string, avro::GenericDatum> leaf(*propertyName, DecodeV8(ctx, mapped, map->Get(key)));
-            v.push_back(leaf);
-          }
-          genMap.value() = v;
-
-          datum.value<avro::GenericMap>() = genMap;
-        }
-      }
-      break;       
-    //Unimplemented avro types
-    case avro::AVRO_UNION:
-
-    case avro::AVRO_FIXED:
-
-    case avro::AVRO_ENUM:
-
-    case avro::AVRO_SYMBOLIC:
-
-    case avro::AVRO_UNKNOWN:
-
-    default:
-      {
-        return datum;
-      }
+void handleCallbacks(Avro *ctx, datumBaton *baton, const Arguments &args, int startPos){
+  if(args.Length() > startPos+1 ){
+    if(args[startPos]->IsFunction()){
+      baton->onSuccess = Persistent<Function>::New(Handle<Function>::Cast(args[startPos]));
+    }else{
+      //error onSuccess must be a function
+      OnError(ctx, on_error, "onSuccess must be a callback function.");
+    }
+  }else{
+    baton->onSuccess = on_datum;
   }
-  return datum;
+  startPos++;
+  // set onerror callback for the proccess struct 
+  if(args.Length() > startPos+1 ){
+    if(args[startPos]->IsFunction()){
+      baton->onError = Persistent<Function>::New(Handle<Function>::Cast(args[startPos]));
+    }else{
+      OnError(ctx, on_error, "onError must be a callback function.");
+    }
+    //error onSuccess must be a function
+  }else{
+    baton->onError = on_error;
+  }
 }
 
 /**
@@ -660,12 +455,12 @@ static void OnError(Avro *ctx, Persistent<Value> callback, const char* error){
 
   if(callback->IsFunction()){
     MakeCallback(ctx->handle_, Persistent<Function>::Cast(callback), 1, args);
-    //make sure to remove the callback. 
-    callback.Dispose();
+    //make sure to remove the callback. Actually don't do that here. 
+    //callback.Dispose();
   }else if(callback->IsString()){
     MakeCallback(ctx->handle_, Persistent<String>::Cast(callback), 1, args);
   }else{
-    printf("wtf\n"); 
+    printf("error wtf\n"); 
   }
 }
 
@@ -694,11 +489,11 @@ static void OnDatum(Avro *ctx, Persistent<Value> callback, Handle<Value> datum) 
 
   if(callback->IsFunction()){
     MakeCallback(ctx->handle_, Persistent<Function>::Cast(callback), 1, args);
-    callback.Dispose();
+    //callback.Dispose();
   }else if(callback->IsString()){
     MakeCallback(ctx->handle_, Persistent<String>::Cast(callback), 1, args);
   }else{
-    printf("wtf\n"); 
+    printf("datum wtf\n"); 
   }
 }
 
@@ -713,8 +508,8 @@ void Avro::Initialize(Handle<Object> target){
 
   a_temp->InstanceTemplate()->SetInternalFieldCount(1);
 
-  NODE_SET_PROTOTYPE_METHOD(a_temp, "decode", Avro::DecodeFile);
-  NODE_SET_PROTOTYPE_METHOD(a_temp, "encode", Avro::EncodeFile);
+  NODE_SET_PROTOTYPE_METHOD(a_temp, "decodeFile", Avro::DecodeFile);
+  NODE_SET_PROTOTYPE_METHOD(a_temp, "encodeFile", Avro::EncodeFile);
 
   NODE_SET_PROTOTYPE_METHOD(a_temp, "push", Avro::Push);
   NODE_SET_PROTOTYPE_METHOD(a_temp, "queueSchema", Avro::QueueSchema);

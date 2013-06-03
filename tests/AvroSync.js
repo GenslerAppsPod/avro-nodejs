@@ -10,12 +10,12 @@ avro.onerror = function(error){
 };
 
 var buildingSchema = '{\
-    "name": "com.gensler.models.organizations.Organization",\
+    "name": "Organization",\
     "type": "record",\
     "fields": [\
       { "name": "id", "type": \
         {\
-          "name": "com.gensler.models.common.GUID",\
+          "name": "GUID",\
           "type": "record",\
           "fields": [\
             { "name": "bytes", "type": "bytes"}\
@@ -27,13 +27,41 @@ var buildingSchema = '{\
     ]\
   }';
 
+var fixedExample = '{\
+  "name": "com.gensler.scalavro.protocol.HandshakeRequest",\
+  "type": "record",\
+  "fields": [{\
+    "name": "clientHash",\
+    "type": {\
+      "name": "MD5",\
+      "type": "fixed",\
+      "size": 16,\
+      "namespace": "com.gensler.scalavro.protocol",\
+      "aliases": []\
+    }\
+  }, {\
+    "name": "clientProtocol",\
+    "type": ["null", "string"]\
+  }, {\
+    "name": "serverHash",\
+    "type": "com.gensler.scalavro.protocol.MD5"\
+  }, {\
+    "name": "meta",\
+    "type": ["null", {\
+      "type": "map",\
+      "values": "bytes"\
+    }]\
+  }]\
+}';
+
+
 var complexSchema = '{\
-  "name": "com.gensler.organizations.GetOrganization",\
+  "name": "GetOrganization",\
   "type": "record",\
   "fields": [\
     { "name": "id", "type": \
       {\
-        "name": "com.gensler.models.common.GUID",\
+        "name": "common.GUID",\
         "type": "record",\
         "fields": [\
           { "name": "bytes", "type": "bytes"}\
@@ -43,16 +71,41 @@ var complexSchema = '{\
   ]\
 }';
 
+var complexUnion = '[{\
+  "name": "A",\
+  "type": "record",\
+  "fields": [{"name": "x", "type": ["int", "string"]}]\
+  }, {\
+    "name": "B",\
+    "type": "record",\
+    "fields": [{"name": "x", "type": "string"}]\
+  }]';
+
+var union ='["string", "double"]';
 
 var map = '{"type": "map","values": "bytes"}';
 // Some of the types supported
 // TODO finish off examples.
+var fixedResult = avro.decodeDatum(fixedExample, new Buffer(
+  avro.encodeDatum(fixedExample, { 
+      clientHash:  new Buffer([ 120, 231, 49, 2, 125, 143, 213, 14, 214, 66, 52, 11, 124, 154, 99, 179 ]),
+      clientProtocol: { string: "client"},
+      serverHash:  new Buffer([ 120, 231, 49, 2, 125, 143, 213, 14, 214, 66, 52, 11, 124, 154, 99, 179 ]),
+      meta: null
+  })
+));
+
+var complexUnionResult = avro.decodeDatum(complexUnion, new Buffer(avro.encodeDatum(complexUnion, { "A": {"x": {string: "a String"}}})));
+var unionResult = avro.decodeDatum(union, new Buffer(avro.encodeDatum(union, { string: "we have a string"})));
 var mapResult = avro.decodeDatum(map, new Buffer(avro.encodeDatum(map, {sequence: new Buffer(avro.encodeDatum('"long"', 12345))})));
 var booleanResult = avro.decodeDatum('"boolean"', new Buffer(avro.encodeDatum('"boolean"', true )));
 var stringResult = avro.decodeDatum('"string"', new Buffer(avro.encodeDatum('"string"', "A string to parse" )));
 var complexResult = avro.decodeDatum(complexSchema, new Buffer(avro.encodeDatum(complexSchema, { id: { bytes: new Buffer([8,-85,-51,18,52]) }})));
 var longResult = avro.decodeDatum('"long"', new Buffer(avro.encodeDatum('"long"', 12345)));
 
+console.log("complex union result: ",complexUnionResult);
+console.log("fixed result: ", fixedResult);
+console.log("union result: ", unionResult);
 console.log("boolean result: ", booleanResult);
 console.log("map result: ", mapResult);
 console.log("long result: ", longResult);

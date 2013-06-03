@@ -15,78 +15,75 @@ avro.onerror = function(error){
 avro.ondatum = function(datum){
   console.log("onDatum",datum);
 };
-var buildingSchema = '{\
-    "name": "com.gensler.models.organizations.Organization",\
-    "type": "record",\
-    "fields": [\
-      { "name": "id", "type": \
-        {\
-          "name": "com.gensler.models.common.GUID",\
-          "type": "record",\
-          "fields": [\
-            { "name": "bytes", "type": "bytes"}\
-          ]\
-        }\
-      },\
-      { "name": "name", "type": "string" },\
-      { "name": "organizationType", "type": "string" }\
-    ]\
-  }';
 
-var complexSchema = '{\
-  "name": "com.gensler.organizations.GetOrganization",\
+var jsonSchema = '{\
   "type": "record",\
-  "fields": [\
-    { "name": "id", "type": \
-      {\
-        "name": "com.gensler.models.common.GUID",\
-        "type": "record",\
-        "fields": [\
-          { "name": "bytes", "type": "bytes"}\
-        ]\
-      }\
+  "name": "cpx",\
+  "fields" : [{\
+    "name": "re",\
+    "type": ["double", "null"]\
+    },\
+    {\
+      "name": "im",\
+      "type" : "double",\
+      "default" : "2.0"\
+    },\
+    {\
+      "name": "name",\
+      "type": "string",\
+      "default" : "hello"\
+    },\
+    {\
+      "name": "array",\
+      "type": [{\
+        "type": "array",\
+        "items": "string"\
+      }, "null"],\
+      "default": "null"\
+    },\
+    {\
+      "name": "map",\
+      "type": [{\
+        "type": "map",\
+        "values": "int"\
+      }]\
     }\
-  ]\
-}';
+  ]}';
 
-var map = '{"type": "map","values": "bytes"}';
-
-
-client.on('connectFailed', function(error) {
-    console.log('Connect Error: ' + error.toString());
-});
-
-client.on('connect', function(connection) {
-    avro.queueSchema('{"type": "map", "values": "bytes"}',
-    function(datum){
-      var sequenceNum = avro.decodeDatum('"long"', new Buffer(datum.sequence));
-      avro.queueSchema('"boolean"', function(errorFlag){
-        if(!errorFlag){
-          avro.queueSchema(buildingSchema);
-        }else{
-          console.log(errorFlag);
-        }
-      },
-      function(error){
-
-      });
-    },
-    function(errer){
-      console.log(error);
-    });
-  connection.on('message', function(message) {
-    if (message.type === 'utf8') {
-      console.log('Received Message: ' + message.utf8Data);
-      connection.sendUTF(message.utf8Data);
-    }else if (message.type === 'binary') {
-      avro.push(message.binaryData);
-    }
+avro.queueSchema(jsonSchema,
+  function(datum){
+    console.log(datum);
+  },
+  function(error){
+    console.log(error);
   });
-  connection.sendBytes(new Buffer(avro.encodeDatum(map, {sequence: new Buffer(avro.encodeDatum('"long"', 12345))})));
-  connection.sendBytes(new Buffer(avro.encodeDatum('"string"', "com.gensler.organizations.GetOrganization")));
-  connection.sendBytes(new Buffer(avro.encodeDatum(complexSchema, { id: { bytes: new Buffer([8,-85,-51,18,52]) }})));
+
+fs.open("./data.bin", 'r', function(status, fd) {
+  fs.fstat(fd,function(err, stats){
+    var i=0;
+    var s=stats.size;
+    var buffer = new Buffer(100);
+
+    console.log('.'+"data.bin"+' '+s);
+    buf(fs,fd,0,s,buffer);
+  });
 });
 
-//example of web connection String
-client.connect('ws://node1.genslerwi.com:9000/api/gis-data-api/0.1.0');
 
+var buf=function(fs,fd,i,s,buffer){
+  if(i+buffer.length<s){
+    fs.read(fd,buffer,0,buffer.length,i,function(e,l,b){
+      avro.push(b.slice(0,l));
+
+      i=i+buffer.length;
+      setTimeout(function(){
+        buf(fs,fd,i,s,buffer);
+      }, 1);
+    });
+  }else{
+    fs.read(fd,buffer,0,buffer.length,i,function(e,l,b){
+      avro.push(b.slice(0,l));
+      fs.close(fd);
+    });
+  }
+};

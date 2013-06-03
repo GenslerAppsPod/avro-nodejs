@@ -14,6 +14,7 @@
 #include <queue>
 #include "BufferedInputStream.hh"
 
+
 namespace node {
 
 using namespace node;
@@ -40,7 +41,6 @@ public:
   uv_mutex_t queueLock_;
   avronode::BufferedInputStream *buffer_;
   static void Initialize(v8::Handle<v8::Object> target);
-  static v8::Handle<v8::Value> DecodeAvro(const avro::GenericDatum& datum);
 private: 
 
   static v8::Handle<v8::Value> New(const v8::Arguments& args);

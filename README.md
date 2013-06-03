@@ -2,13 +2,13 @@
 
 A wrapper for the c++ implemenation of Avro.
 
-#Why
+#The Why
 
-  Javascript is a async callback world so the avro library should play in that world. 
+  Javascript is a async callback world so the avro library should play in that world. I've also seen far too many partially completed avro javascript projects on github. 
 
 #API
 
-###Avro sync functionality
+###Avro sync
 
   avro.encodeDatum(schema, value);
 
@@ -20,7 +20,7 @@ A wrapper for the c++ implemenation of Avro.
     var bytes = avro.encodeDatum('"float"', 12345.89);
     avro.decodeDatum('"float"', new Buffer(bytes));
 
-###Avro async functionality
+###Avro async
 
   avro.queueSchema(schema, onSuccess, onError);
 
@@ -46,15 +46,86 @@ A wrapper for the c++ implemenation of Avro.
 
 #Build and run
 
+Install Node.js.  There are various methods to install Node.js that vary from system to system.
+Information on installing using package managers can be found at:
+<https://github.com/joyent/node/wiki/Installing-Node.js-via-package-manager>
+Other installation options can be found at: <http://nodejs.org/download/>
+
+Install and build the Avro C++ project found here:
+<https://github.com/apache/avro>
+
+The Avro C++ library is dependent on one or more Boost libraries, so you may need to install Boost
+before compiling Avro.
+On Ubuntu, installing the package "libboost-all-dev" is known to work, though it may be possible to
+install with a smaller subset of the Boost libraries.
+
+Specific build instructions for the C++ Avro library may be found in the "PATH_TO_AVRO_CHECKOUT/lang/c++/README" file.
+However, it seems that currently the documentation there is a little off.
+The following has been known to work:
+
+Execute the following from within the "PATH_TO_AVRO_CHECKOUT/lang/c++" folder:
+
+    ./build.sh test
+
+If all of the required dependencies are installed, that should configure and build the Node C++
+libs and run the included tests.  This should be all that is needed for this step, and you should
+now have a shiny new shared lib in the "PATH_TO_AVRO_CHECKOUT/lang/c++/build" folder (and a symlink named "libavrocpp.so"
+pointing to it).
+
+If desired, you can easily create a Debian package (or RPM if its your preferred package manager)
+using checkinstall by executing the following:
+
+    sudo checkinstall \
+                --install=no \
+                --pkgname="avro-cpp" \
+                --pkgrelease="_avro version here_" \
+                --maintainer="_maintainer email here_" \
+                --addso=yes
+
+Then simply use dpkg to install the generated .deb package.
+
+    dpkg -i avro-cpp_VERSION_ARCH.deb
+
+Next, it may be necessary to update the paths in the "binding.gyp" file.  Simply edit the file and
+replace paths in the following lines with appropriate paths:
+
+    'include_dirs': ['/usr/local/include'],
+
+    'ldflags': ['-Lavrocpp/lib'],
+    'libraries': ['avrocpp/lib/libavrocpp.so']
+
+For example, if you built the Avro C++ libraries and installed under the prefix "/usr/local",
+you would update the lines to the following:
+
+    'include_dirs': ['/usr/local/include'],
+
+    'ldflags': ['-L/usr/local/lib'],
+    'libraries': ['/usr/local/lib/libavrocpp.so']
+
+If you don't already have them installed, there are several npm packages that are required to
+build, install and use the library.
+
+The library itself requires the WebSocket-Node package (https://github.com/Worlize/WebSocket-Node),
+which can be installed via npm by running the following from the root folder of your avro-nodejs
+folder:
+
+    npm install websocket
+
+To build, you need the node package node-gyp:
+
+    sudo npm install -g node-gyp
+
+After you have all of the prerequisite packages installed, you can build avro-nodejs.
+
     node-gyp configure build
 
-    node server.js
+Tests under the "tests" subfolder can then be run:
+
+    cd tests
+    node AvroSync.js
 
 
-
-
-
-Copyright (c) 2013 Benjamin Metzger <ben@metzger.cc>
+Copyright (c) 2013 Gensler <ben@metzger.cc>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
