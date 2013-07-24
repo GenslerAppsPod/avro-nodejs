@@ -1,0 +1,146 @@
+==11717== Memcheck, a memory error detector
+==11717== Copyright (C) 2002-2011, and GNU GPL'd, by Julian Seward et al.
+==11717== Using Valgrind-3.7.0 and LibVEX; rerun with -h for copyright info
+==11717== Command: node AvroSync.js
+==11717== Parent PID: 2161
+==11717== 
+==11717== Warning: noted but unhandled ioctl 0x5451 with no size/direction hints
+==11717==    This could cause spurious value errors to appear.
+==11717==    See README_MISSING_SYSCALL_OR_IOCTL for guidance on writing a proper wrapper.
+==11717== Warning: noted but unhandled ioctl 0x5451 with no size/direction hints
+==11717==    This could cause spurious value errors to appear.
+==11717==    See README_MISSING_SYSCALL_OR_IOCTL for guidance on writing a proper wrapper.
+==11717== Warning: noted but unhandled ioctl 0x5451 with no size/direction hints
+==11717==    This could cause spurious value errors to appear.
+==11717==    See README_MISSING_SYSCALL_OR_IOCTL for guidance on writing a proper wrapper.
+==11717== Warning: set address range perms: large range [0x352786730000, 0x3527a6730000) (noaccess)
+==11717== Warning: set address range perms: large range [0x352786730000, 0x3527a6730000) (noaccess)
+==11717== 
+==11717== HEAP SUMMARY:
+==11717==     in use at exit: 89,546 bytes in 79 blocks
+==11717==   total heap usage: 11,676 allocs, 11,597 frees, 18,676,861 bytes allocated
+==11717== 
+==11717== 24 bytes in 1 blocks are definitely lost in loss record 11 of 39
+==11717==    at 0x4C2B1C7: operator new(unsigned long) (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==11717==    by 0x5C719A: node::ImmutableAsciiSource::CreateFromLiteral(char const*, unsigned long) (in /usr/local/bin/node)
+==11717==    by 0x5B1437: node::Load(v8::Handle<v8::Object>) (in /usr/local/bin/node)
+==11717==    by 0x5B221D: node::Start(int, char**) (in /usr/local/bin/node)
+==11717==    by 0x5C8E76C: (below main) (libc-start.c:226)
+==11717== 
+==11717== 24 bytes in 1 blocks are definitely lost in loss record 12 of 39
+==11717==    at 0x4C2B1C7: operator new(unsigned long) (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==11717==    by 0x5C719A: node::ImmutableAsciiSource::CreateFromLiteral(char const*, unsigned long) (in /usr/local/bin/node)
+==11717==    by 0x5C3D02: node::MainSource() (in /usr/local/bin/node)
+==11717==    by 0x5B143F: node::Load(v8::Handle<v8::Object>) (in /usr/local/bin/node)
+==11717==    by 0x5B221D: node::Start(int, char**) (in /usr/local/bin/node)
+==11717==    by 0x5C8E76C: (below main) (libc-start.c:226)
+==11717== 
+==11717== 56 bytes in 1 blocks are definitely lost in loss record 17 of 39
+==11717==    at 0x4C2B1C7: operator new(unsigned long) (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==11717==    by 0x5B509D: node::Buffer::New(v8::Arguments const&) (in /usr/local/bin/node)
+==11717==    by 0x73DDEF: v8::internal::Builtin_HandleApiCallConstruct(v8::internal::(anonymous namespace)::BuiltinArguments<(v8::internal::BuiltinExtraArguments)1>, v8::internal::Isolate*) (in /usr/local/bin/node)
+==11717==    by 0x352786806361: ???
+==11717==    by 0x35278680D3F2: ???
+==11717==    by 0x352786836C74: ???
+==11717==    by 0x35278680CCCD: ???
+==11717==    by 0x35278682EDB7: ???
+==11717==    by 0x35278682E5A7: ???
+==11717==    by 0x352786833F95: ???
+==11717==    by 0x35278682DA84: ???
+==11717==    by 0x35278682D564: ???
+==11717== 
+==11717== 168 bytes in 1 blocks are possibly lost in loss record 25 of 39
+==11717==    at 0x4C2B1C7: operator new(unsigned long) (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==11717==    by 0x5CA70F: node::SignalWrap::New(v8::Arguments const&) (in /usr/local/bin/node)
+==11717==    by 0x73DDEF: v8::internal::Builtin_HandleApiCallConstruct(v8::internal::(anonymous namespace)::BuiltinArguments<(v8::internal::BuiltinExtraArguments)1>, v8::internal::Isolate*) (in /usr/local/bin/node)
+==11717==    by 0x352786806361: ???
+==11717==    by 0x35278680D3F2: ???
+==11717==    by 0x3527868732C7: ???
+==11717==    by 0x35278686B5E0: ???
+==11717==    by 0x35278680D506: ???
+==11717==    by 0x352786806115: ???
+==11717==    by 0x766C97: v8::internal::Invoke(bool, v8::internal::Handle<v8::internal::JSFunction>, v8::internal::Handle<v8::internal::Object>, int, v8::internal::Handle<v8::internal::Object>*, bool*) (in /usr/local/bin/node)
+==11717==    by 0x76744E: v8::internal::Execution::Call(v8::internal::Handle<v8::internal::Object>, v8::internal::Handle<v8::internal::Object>, int, v8::internal::Handle<v8::internal::Object>*, bool*, bool) (in /usr/local/bin/node)
+==11717==    by 0x8395DD: v8::internal::Object::GetPropertyWithDefinedGetter(v8::internal::Object*, v8::internal::JSReceiver*) (in /usr/local/bin/node)
+==11717== 
+==11717== 344 bytes in 1 blocks are possibly lost in loss record 28 of 39
+==11717==    at 0x4C2B1C7: operator new(unsigned long) (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==11717==    by 0x5D14BD: node::TTYWrap::New(v8::Arguments const&) (in /usr/local/bin/node)
+==11717==    by 0x73DDEF: v8::internal::Builtin_HandleApiCallConstruct(v8::internal::(anonymous namespace)::BuiltinArguments<(v8::internal::BuiltinExtraArguments)1>, v8::internal::Isolate*) (in /usr/local/bin/node)
+==11717==    by 0x352786806361: ???
+==11717==    by 0x35278680D3F2: ???
+==11717==    by 0x35278686F71F: ???
+==11717==    by 0x35278680D1E9: ???
+==11717==    by 0x35278686B8B6: ???
+==11717==    by 0x35278686B4ED: ???
+==11717==    by 0x35278680D506: ???
+==11717==    by 0x352786806115: ???
+==11717==    by 0x766C97: v8::internal::Invoke(bool, v8::internal::Handle<v8::internal::JSFunction>, v8::internal::Handle<v8::internal::Object>, int, v8::internal::Handle<v8::internal::Object>*, bool*) (in /usr/local/bin/node)
+==11717== 
+==11717== 344 bytes in 1 blocks are possibly lost in loss record 29 of 39
+==11717==    at 0x4C2B1C7: operator new(unsigned long) (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==11717==    by 0x5D14BD: node::TTYWrap::New(v8::Arguments const&) (in /usr/local/bin/node)
+==11717==    by 0x73DDEF: v8::internal::Builtin_HandleApiCallConstruct(v8::internal::(anonymous namespace)::BuiltinArguments<(v8::internal::BuiltinExtraArguments)1>, v8::internal::Isolate*) (in /usr/local/bin/node)
+==11717==    by 0x352786806361: ???
+==11717==    by 0x35278680D3F2: ???
+==11717==    by 0x35278686F71F: ???
+==11717==    by 0x35278680CFAD: ???
+==11717==    by 0x35278686B8B6: ???
+==11717==    by 0x352786873AF1: ???
+==11717==    by 0x35278680D506: ???
+==11717==    by 0x352786806115: ???
+==11717==    by 0x766C97: v8::internal::Invoke(bool, v8::internal::Handle<v8::internal::JSFunction>, v8::internal::Handle<v8::internal::Object>, int, v8::internal::Handle<v8::internal::Object>*, bool*) (in /usr/local/bin/node)
+==11717== 
+==11717== 960 bytes in 40 blocks are definitely lost in loss record 33 of 39
+==11717==    at 0x4C2B1C7: operator new(unsigned long) (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==11717==    by 0x5C719A: node::ImmutableAsciiSource::CreateFromLiteral(char const*, unsigned long) (in /usr/local/bin/node)
+==11717==    by 0x5C3D64: node::DefineJavaScript(v8::Handle<v8::Object>) (in /usr/local/bin/node)
+==11717==    by 0x5B2636: node::Binding(v8::Arguments const&) (in /usr/local/bin/node)
+==11717==    by 0x7405B4: v8::internal::Builtin_HandleApiCall(v8::internal::(anonymous namespace)::BuiltinArguments<(v8::internal::BuiltinExtraArguments)1>, v8::internal::Isolate*) (in /usr/local/bin/node)
+==11717==    by 0x352786806361: ???
+==11717==    by 0x35278682D2D2: ???
+==11717==    by 0x35278680D506: ???
+==11717==    by 0x352786806115: ???
+==11717==    by 0x766C97: v8::internal::Invoke(bool, v8::internal::Handle<v8::internal::JSFunction>, v8::internal::Handle<v8::internal::Object>, int, v8::internal::Handle<v8::internal::Object>*, bool*) (in /usr/local/bin/node)
+==11717==    by 0x76744E: v8::internal::Execution::Call(v8::internal::Handle<v8::internal::Object>, v8::internal::Handle<v8::internal::Object>, int, v8::internal::Handle<v8::internal::Object>*, bool*, bool) (in /usr/local/bin/node)
+==11717==    by 0x716F6E: v8::Function::Call(v8::Handle<v8::Object>, int, v8::Handle<v8::Value>*) (in /usr/local/bin/node)
+==11717== 
+==11717== 1,257 (96 direct, 1,161 indirect) bytes in 1 blocks are definitely lost in loss record 36 of 39
+==11717==    at 0x4C2B1C7: operator new(unsigned long) (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==11717==    by 0x7036D13: node::Avro::New(v8::Arguments const&) (in /mnt/bmetzger/Handshake/node_modules/avronode/build/Release/avro.node)
+==11717==    by 0x73DDEF: v8::internal::Builtin_HandleApiCallConstruct(v8::internal::(anonymous namespace)::BuiltinArguments<(v8::internal::BuiltinExtraArguments)1>, v8::internal::Isolate*) (in /usr/local/bin/node)
+==11717==    by 0x352786806361: ???
+==11717==    by 0x35278680D3F2: ???
+==11717==    by 0x352786864922: ???
+==11717==    by 0x3527868122BD: ???
+==11717==    by 0x3527868641CF: ???
+==11717==    by 0x35278685EFE4: ???
+==11717==    by 0x35278685B115: ???
+==11717==    by 0x35278684A586: ???
+==11717==    by 0x352786849F4A: ???
+==11717== 
+==11717== 8,248 (56 direct, 8,192 indirect) bytes in 1 blocks are definitely lost in loss record 38 of 39
+==11717==    at 0x4C2B1C7: operator new(unsigned long) (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==11717==    by 0x5B509D: node::Buffer::New(v8::Arguments const&) (in /usr/local/bin/node)
+==11717==    by 0x73DDEF: v8::internal::Builtin_HandleApiCallConstruct(v8::internal::(anonymous namespace)::BuiltinArguments<(v8::internal::BuiltinExtraArguments)1>, v8::internal::Isolate*) (in /usr/local/bin/node)
+==11717==    by 0x352786806361: ???
+==11717==    by 0x35278680D3F2: ???
+==11717==    by 0x352786861B46: ???
+==11717==    by 0x35278686147E: ???
+==11717==    by 0x35278680CCCD: ???
+==11717==    by 0x35278680D1E3: ???
+==11717==    by 0x35278685F561: ???
+==11717==    by 0x35278685EF98: ???
+==11717==    by 0x35278685B115: ???
+==11717== 
+==11717== LEAK SUMMARY:
+==11717==    definitely lost: 1,216 bytes in 45 blocks
+==11717==    indirectly lost: 9,353 bytes in 7 blocks
+==11717==      possibly lost: 856 bytes in 3 blocks
+==11717==    still reachable: 78,121 bytes in 24 blocks
+==11717==         suppressed: 0 bytes in 0 blocks
+==11717== Reachable blocks (those to which a pointer was found) are not shown.
+==11717== To see them, rerun with: --leak-check=full --show-reachable=yes
+==11717== 
+==11717== For counts of detected and suppressed errors, rerun with: -v
+==11717== ERROR SUMMARY: 9 errors from 9 contexts (suppressed: 2 from 2)

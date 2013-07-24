@@ -12,4 +12,5 @@ function(datum){
 function(error){
   console.log(error);
 });
+avro.close();
 

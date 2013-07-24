@@ -5,7 +5,7 @@
 #include <avro/Generic.hh>
 #include <avro/Specific.hh>
 
-void unionBranch(avro::GenericDatum *datum, char *type);
+void unionBranch(avro::GenericDatum *datum, const char *type);
 
 avro::GenericDatum DecodeV8(avro::GenericDatum datum, v8::Local<v8::Value> object);
 

@@ -12,9 +12,7 @@ Persistent<String> on_schema;
 Persistent<String> on_datum;
 Persistent<String> on_error;
 
-uv_async_t async;
-
-static void PrintResult(uv_async_t *handle, int status);
+static void ResultEvent(uv_async_t *handle, int status);
 static void Process(uv_work_t* work_req);
 static void After(uv_work_t* work_req, int status);
 static void OnError(Avro *ctx, Persistent<Value> callback, const char* error);
@@ -22,6 +20,10 @@ static void OnSchema(Avro *ctx, const char* schema);
 static void OnDatum(Avro *ctx, Persistent<Value> callback, Handle<Value> datum);
 void handleCallbacks(Avro *ctx, datumBaton *baton, const Arguments &args, int startPos);
 
+/**
+ * Constructs a new avro object. Creates new worker thread and async callbacks
+ * for async support.
+ */
 Handle<Value> Avro::New(const Arguments& args){
     HandleScope scope;
 
@@ -29,18 +31,20 @@ Handle<Value> Avro::New(const Arguments& args){
     ctx->decoder_= binaryDecoder();
     std::vector<uint8_t> data;
     ctx->buffer_ = new avronode::BufferedInputStream(data, 0, 0);
-
+    ctx->read_  = true;
+    ctx->avro_loop_ = uv_default_loop();
     ctx->Wrap(args.This());
     uv_sem_init(&ctx->sem_, 0);
     uv_mutex_init(&ctx->datumLock_);
     uv_mutex_init(&ctx->queueLock_);
 
-    uv_async_init(uv_default_loop(), &async, PrintResult);
+    uv_async_init(ctx->avro_loop_, &ctx->async_, ResultEvent);
     //create new work_t
     uv_work_t *work_req = new uv_work_t;
+
     work_req->data = ctx;
 
-    uv_queue_work(uv_default_loop(),
+    uv_queue_work(ctx->avro_loop_,
                   work_req,
                   Process,
                   After);  
@@ -48,27 +52,59 @@ Handle<Value> Avro::New(const Arguments& args){
     return args.This();
 }
 
-static void PrintResult(uv_async_t *handle, int status) {
+/**
+ * [ResultEvent description]
+ * @param handle [The uv_async handle ]
+ * @param status [description]
+ */
+static void ResultEvent(uv_async_t *handle, int status) {
   Avro* ctx = (Avro *)handle->data;
   // loop through datums then release lock.
   // Thread safe block here 
   // ---------------------------------------------------------------------
   uv_mutex_lock(&ctx->datumLock_);
-  for(int i = 0;i < ctx->datums_.size();i++){
+  for(size_t i = 0;i < ctx->datums_.size();i++){
     datumBaton baton = ctx->datums_[i];
     //test to see if we have an error;
-    if(baton.errorMessage.empty()){
+    if(!strlen(baton.errorMessage)){
       //success
-      OnDatum(ctx, baton.onSuccess, DecodeAvro(baton.datum));
+      OnDatum(ctx, baton.onSuccess, DecodeAvro(*baton.datum));
     }else{
       //print error message
-      OnError(ctx, baton.onError, baton.errorMessage.c_str());
+      printf("baton error '%s' length %d\n",baton.errorMessage, strlen(baton.errorMessage));
+      OnError(ctx, baton.onError, baton.errorMessage);
     }
+
+    delete baton.datum;
   }
   ctx->datums_.clear();
   uv_mutex_unlock(&ctx->datumLock_);
+
   // Thread safe block ends here
   // ---------------------------------------------------------------------
+}
+
+/**
+ * [Closes the avro object. ]
+ */
+Handle<Value> Avro::Close(const Arguments &args){
+  HandleScope scope;
+  Avro * ctx = ObjectWrap::Unwrap<Avro>(args.This());
+  uv_mutex_lock(&ctx->queueLock_);
+  while(ctx->processQueue_.size() > 0){
+    ctx->processQueue_.pop();
+  }
+  ctx->read_ = false;
+  ctx->buffer_->close();
+
+  //set the smart pointer to 0 so that it can be cleaned up.
+  ctx->decoder_.reset();
+  uv_sem_post(&ctx->sem_);
+  uv_mutex_unlock(&ctx->queueLock_);
+  
+  //uv_loop_delete(ctx->avro_loop_);
+  uv_run(ctx->avro_loop_, UV_RUN_DEFAULT); 
+  return scope.Close(Undefined());
 }
 
 /**
@@ -78,8 +114,8 @@ static void PrintResult(uv_async_t *handle, int status) {
 Handle<Value> Avro::QueueSchema(const Arguments &args){
   HandleScope scope;
   Avro * ctx = ObjectWrap::Unwrap<Avro>(args.This());
-
   datumBaton baton;
+  baton.errorMessage = "";
 
   if(!args[0]->IsString()){
     OnError(ctx, on_error, "schema must be a string");
@@ -88,39 +124,47 @@ Handle<Value> Avro::QueueSchema(const Arguments &args){
   //grab string from input.
   v8::String::Utf8Value schemaString(args[0]->ToString());
   std::istringstream is(*schemaString);
-  //create schema
-  //
-  ValidSchema schema;
+
   try{
-    compileJsonSchema(is, schema);
+    compileJsonSchema(is, baton.schema);
+
+    // if args > 2 and args[1] is a function set our onSuccess  
+    handleCallbacks(ctx, &baton, args, 1);
+
+    // ------------------------------------------------
+    // lock section here adding to queue
+    uv_mutex_lock(&ctx->queueLock_);
+
+    //push new schema to queue
+    ctx->processQueue_.push(baton);
+    uv_sem_post(&ctx->sem_);
+    uv_mutex_unlock(&ctx->queueLock_);
+    // ------------------------------------------------
+    // release lock 
+    // 
   }catch(std::exception &e){
     //TODO should send back the bad schema for user reference. 
     OnError(ctx, on_error, e.what());
     return scope.Close(Undefined());
   }
-
-  baton.schema = schema;
-
-  // if args > 2 and args[1] is a function set our onSuccess  
-  handleCallbacks(ctx, &baton, args, 1);
-
-  // ------------------------------------------------
-  // lock section here adding to queue
-  uv_mutex_lock(&ctx->queueLock_);
-
-  //push new schema to queue
-  ctx->processQueue_.push(baton);
-  uv_sem_post(&ctx->sem_);
-  uv_mutex_unlock(&ctx->queueLock_);
-  // ------------------------------------------------
-  // release lock 
-  // 
-
   return scope.Close(Undefined());
 }
 
+
+/**
+ * Gets the number of schemas that are queued.  
+ */
+ Handle<Value> Avro::PendingSchemas(const Arguments &args){
+  HandleScope scope;
+  Avro * ctx = ObjectWrap::Unwrap<Avro>(args.This());
+
+  return scope.Close(Number::New(ctx->processQueue_.size()));
+ }
+
 /**
  * Sending bytes to the decode async thread loop.
+ * @param bytes [A Buffer containing a series of bytes.]
+ * @return [a javascript undefined]
  */
 Handle<Value> Avro::Push(const Arguments &args){
   HandleScope scope;
@@ -130,40 +174,54 @@ Handle<Value> Avro::Push(const Arguments &args){
     OnError(ctx, on_error, "Wrong number of arguments");
     return scope.Close(Undefined());
   }
+  try{
+    if(args[0]->IsObject()){
+      Local<Object> in_buf = args[0]->ToObject();
+      //get length of buffer
+      int len = Buffer::Length(in_buf);
+      //get data of the buffer
+      uint8_t *in = reinterpret_cast<uint8_t*>(Buffer::Data(in_buf));
 
-  if(args[0]->IsObject()){
-    //convert argument to Object
-    Local<Object> in_buf = args[0]->ToObject();
+      // ------------------------------------------------
+      // lock section here adding to BufferedInputStream.
+      //uv_mutex_lock(&ctx->datumLock_);
 
-    //get length of buffer
-    int len = Buffer::Length(in_buf);
-    uint8_t *in = reinterpret_cast<uint8_t*>(Buffer::Data(in_buf));
+      ctx->buffer_->append(in,len);
 
-    //get data of the buffer
-    // ------------------------------------------------
-    // lock section here adding to BufferedInputStream.
-    uv_mutex_lock(&ctx->datumLock_);
+      //uv_mutex_unlock(&ctx->datumLock_); 
+      // release lock section here.      
+      // ------------------------------------------------
+    }else{
+      OnError(ctx, on_error, "Argument must be a Byte Array");
+    }
 
-    ctx->buffer_->append(in,len);
-
-    uv_mutex_unlock(&ctx->datumLock_);      
-    // ------------------------------------------------
-    // release lock section here. 
-    
-
-  }else{
-    OnError(ctx, on_error, "Argument must be a Byte Array");
+  }catch(std::exception &e){
+    //TODO should send back the bad schema for user reference. 
+    OnError(ctx, on_error, e.what());
+    return scope.Close(Undefined());
   }
 
+
   return scope.Close(Undefined());
+}
+
+
+/**
+ * Gets the size of the underlining Buffer.
+ */
+Handle<Value> Avro::BufferLength(const Arguments &args){
+  HandleScope scope;
+  Avro * ctx = ObjectWrap::Unwrap<Avro>(args.This());
+
+  return scope.Close(Number::New(ctx->buffer_->size()));
+   
 }
 
 /**
  * Takes a avro data file that must contain the schema definition
  * as part of the file. For each datum that is parsed out of the file
  * OnDatum will be called. 
- * TODO change this to provide a callback for on datum and on error.
- * @param avrofile
+ * @param avrofile [The file containing the Avro data and schema. ]
  */
 Handle<Value> Avro::DecodeFile(const Arguments &args) {  
   HandleScope scope;
@@ -185,7 +243,6 @@ Handle<Value> Avro::DecodeFile(const Arguments &args) {
       avro::DataFileReader<avro::GenericDatum> dfr(*filename);
       ValidSchema schema = dfr.dataSchema();
       std::ostringstream oss(std::ios_base::out);
-      schema.toJson(oss);
       avro::GenericDatum datum(dfr.dataSchema());
 
       while(dfr.read(datum)){
@@ -207,8 +264,8 @@ Handle<Value> Avro::DecodeFile(const Arguments &args) {
 /**
  * The sync version of decode datum. The buffer of bytes provided must 
  * contain the entire datum to be decoded. Otherwise an error will be thrown.
- * @param schema
- * @param bytes
+ * @param schema [The schema to decode bytes with.]
+ * @param bytes [A node Buffer object containing all of the bytes of the datum.]
  */
 Handle<Value> Avro::DecodeDatum(const Arguments &args){
   HandleScope scope;
@@ -239,18 +296,22 @@ Handle<Value> Avro::DecodeDatum(const Arguments &args){
     GenericReader reader(schema, decoder);
     GenericDatum *datum = new GenericDatum(schema);
     reader.read(*datum);
-    return scope.Close(DecodeAvro(*datum));
+    Handle<Value> datumObject = DecodeAvro(*datum);
+    decoder.reset();
+    delete datum;
+
+    return scope.Close(datumObject);
   }
 
   return scope.Close(Undefined());
 }
 
 /**
- * Encodes datum(s) to a file specified.
+ * Encodes data to a file specified.
  *
- * @param filename
- * @param schema
- * @param datums
+ * @param filename [The file to write to]
+ * @param schema [The schema to encode the data with.]
+ * @param data [The data that is going to be encoded with specified schema.]
  */
 Handle<Value> Avro::EncodeFile(const Arguments &args) { 
   HandleScope scope; 
@@ -290,69 +351,68 @@ Handle<Value> Avro::EncodeFile(const Arguments &args) {
   */
   return scope.Close(Undefined());
 }
+
 /**
- * Provides a sync function to encode a datum.
- * @param schema
- * @param datum
+ * A synchronous function to encode a datum into avro binary
+ * @param schema [The schema to encode the datum with]
+ * @param datum [The datum to be encoded]
  */
 Handle<Value> Avro::EncodeDatum(const Arguments &args){
   HandleScope scope;
-
   Avro * ctx = ObjectWrap::Unwrap<Avro>(args.This());
 
   if(args.Length()< 2){
     OnError(ctx, on_error, "EncodeDatum requires two params");
-    return scope.Close(Undefined());
+    return scope.Close(Array::New());
   }
 
   if(!args[0]->IsString()){
     OnError(ctx, on_error, "schema must be a string");
-    return scope.Close(Undefined());
+    return scope.Close(Array::New());
   }
-  //grab string from input.
+
+  Local<Array> byteArray = Array::New();
   v8::String::Utf8Value schemaString(args[0]->ToString());
-  std::istringstream is(*schemaString);
-  //create schema
-  //
-  ValidSchema schema;
-  try{
-    compileJsonSchema(is, schema);
-  }catch(std::exception &e){
-    //TODO should send back the bad schema for user reference. 
-    OnError(ctx, on_error, "Error: compiling schema for EncodeDatum");
-    return scope.Close(Undefined());
-  }
-
   Local<Value> object = args[1];
-  avro::GenericDatum datum(schema);
-  datum = DecodeV8(datum, object);
-
-  std::auto_ptr<avro::OutputStream> out = avro::memoryOutputStream();
-  avro::EncoderPtr e = avro::validatingEncoder(schema, avro::binaryEncoder());
-
-  e->init(*out);
+  ValidSchema schema;
 
   try{
+    //grab string from input.
+
+    std::istringstream is(*schemaString);
+    //create schema
+    //
+    compileJsonSchema(is, schema);
+
+    avro::GenericDatum datum(schema);
+    datum = DecodeV8(datum, object);
+
+    std::auto_ptr<avro::OutputStream> out = avro::memoryOutputStream();
+    avro::EncoderPtr e = avro::validatingEncoder(schema, avro::binaryEncoder());
+
+    e->init(*out);
+
     avro::encode(*e, datum);
+
+    //need to flush the bytes to the stream (aka out);
+    e->flush();
+
+    std::auto_ptr<avro::InputStream> in = avro::memoryInputStream(*out);
+
+    avro::StreamReader reader(*in);
+    int i = 0;
+    // could initialize a buffer and then do a while read of x chunk say 4k
+    while(reader.hasMore()){
+      byteArray->Set(i, Uint32::New(reader.read()));
+      i++;
+    }
   }catch(std::exception &e){
     std::string error = e.what();
-    std::string errorMessage = error + *schemaString;
+    std::string errorMessage = error + *schemaString + "\n";
     OnError(ctx, on_error, errorMessage.c_str());
     return scope.Close(Array::New());
   }
-  //need to flush the bytes to the stream (aka out);
-  e->flush();
 
-  std::auto_ptr<avro::InputStream> in = avro::memoryInputStream(*out);
-
-  avro::StreamReader reader(*in);
-  int i = 0;
-  // could initialize a buffer and then do a while read of x chunk say 4k
-  Local<Array> byteArray = Array::New();
-  while(reader.hasMore()){
-    byteArray->Set(i, Uint32::New(reader.read()));
-    i++;
-  }
   //construct a byte array to send back to the javascript
 
   return scope.Close(byteArray);
@@ -369,35 +429,42 @@ static void Process(uv_work_t* work_req){
 
   while(true){
     uv_sem_wait(&ctx->sem_);
-    //create reader and generic datum.
-    datumBaton baton = ctx->processQueue_.front();
-    GenericReader reader(baton.schema, ctx->decoder_);
-    GenericDatum *datum = new GenericDatum(baton.schema);
-    //disgard the top schema
-    
-    // Thread safe area here
-    // ---------------------------------------------------------------
+    //if we got a signal to end and we have an empty queue break;
+    if(!ctx->read_){
+      break;
+    }
     uv_mutex_lock(&ctx->queueLock_);
-    ctx->processQueue_.pop();
+      datumBaton baton = ctx->processQueue_.front();
+      ctx->processQueue_.pop();
     uv_mutex_unlock(&ctx->queueLock_);
-    //Thread safe area leave
-    // ---------------------------------------------------------------
-    
-    //This is a blocking read
-    reader.read(*datum);
-    baton.datum = *datum;
-    // Thread safe area here
+
+    try{
+      //create reader and generic datum.
+      GenericReader reader(baton.schema, ctx->decoder_);
+      baton.datum = new GenericDatum(baton.schema);
+
+      //This is a blocking read
+      reader.read(*baton.datum);
+
+    }catch(std::exception &e){
+      printf("we got an error in the process\n");
+      baton.errorMessage = e.what();
+    }
+        // Thread safe area here
     // ---------------------------------------------------------------
     // mutex lock for writing to datum on avro object. 
+    // 
     uv_mutex_lock(&ctx->datumLock_);
+
     ctx->datums_.push_back(baton);
 
     uv_mutex_unlock(&ctx->datumLock_);
     //Thread safe area leave
     // ---------------------------------------------------------------
     //Send data to returning javascript callback
-    async.data = (void*) ctx;
-    uv_async_send(&async);
+    ctx->async_.data = (void*) ctx;
+    uv_async_send(&ctx->async_);
+
   }
 }
 
@@ -409,6 +476,11 @@ static void Process(uv_work_t* work_req){
  */
 static void After(uv_work_t* work_req, int status){
   HandleScope scope;
+
+  Avro *ctx = static_cast<Avro*>(work_req->data);
+  uv_close((uv_handle_t*)&ctx->async_, NULL);
+  free(work_req);
+
 }
 
 
@@ -446,28 +518,37 @@ void handleCallbacks(Avro *ctx, datumBaton *baton, const Arguments &args, int st
 }
 
 /**
- * [OnError description]
- * @param error [description]
+ * [returns the error message to the callback specified.]
+ * @param ctx [The avro object that we get the handle from]
+ * @param callback [The call back that we return the data error message to]
+ * @param error [error message]
+ * 
  */
 static void OnError(Avro *ctx, Persistent<Value> callback, const char* error){
 
   Local<Value> args[1] = { String::New(error) };
-
   if(callback->IsFunction()){
     MakeCallback(ctx->handle_, Persistent<Function>::Cast(callback), 1, args);
     //make sure to remove the callback. Actually don't do that here. 
     //callback.Dispose();
   }else if(callback->IsString()){
-    MakeCallback(ctx->handle_, Persistent<String>::Cast(callback), 1, args);
+    Local<Value> callback_v = ctx->handle_->Get(callback);
+    //if there is no error callback defined we'll just throw an exception;
+    if(callback_v->IsFunction()){
+      MakeCallback(ctx->handle_, Local<Function>::Cast(callback_v), 1, args);
+    }else{
+      v8::ThrowException(v8::String::New(error));
+    }
+
   }else{
     printf("error wtf\n"); 
   }
 }
 
 /**
- * void OnSchema(const char* schema)
- * @param schema [description]
- * [OnSchema description]
+ * [Returns the schema definiton in json format]
+ * @param ctx [The context for our callback]
+ * @param schema [The scheam that we set.]
  */
 static void OnSchema(Avro *ctx, const char* schema){
   HandleScope scope;
@@ -480,8 +561,10 @@ static void OnSchema(Avro *ctx, const char* schema){
 }
 
 /**
- * [OnDatum description]
- * @param datum [description]
+ * [OnDatum return the datum to the specified callback method]
+ * @param ctx [The avro object that we get the handle from]
+ * @param callback [The call back that we return the data error message to]
+ * @param datum [The datum that we're passing to the callback function]
  */
 static void OnDatum(Avro *ctx, Persistent<Value> callback, Handle<Value> datum) {
 
@@ -498,7 +581,7 @@ static void OnDatum(Avro *ctx, Persistent<Value> callback, Handle<Value> datum) 
 }
 
 /**
- * [Initialize description]
+ * [Creates all of the possible calls from the javascript]
  * @param target [description]
  */
 void Avro::Initialize(Handle<Object> target){
@@ -512,14 +595,12 @@ void Avro::Initialize(Handle<Object> target){
   NODE_SET_PROTOTYPE_METHOD(a_temp, "encodeFile", Avro::EncodeFile);
 
   NODE_SET_PROTOTYPE_METHOD(a_temp, "push", Avro::Push);
+  NODE_SET_PROTOTYPE_METHOD(a_temp, "bufferLength", Avro::BufferLength);
   NODE_SET_PROTOTYPE_METHOD(a_temp, "queueSchema", Avro::QueueSchema);
+  NODE_SET_PROTOTYPE_METHOD(a_temp, "pendingSchemas", Avro::PendingSchemas);
   NODE_SET_PROTOTYPE_METHOD(a_temp, "decodeDatum", Avro::DecodeDatum);
   NODE_SET_PROTOTYPE_METHOD(a_temp, "encodeDatum", Avro::EncodeDatum);
-
-
-/*
-  NODE_SET_PROTOTYPE_METHOD(a_temp, "encodeBytes", Avro::EncodeBytes);
-*/
+  NODE_SET_PROTOTYPE_METHOD(a_temp, "close", Avro::Close);
   a_temp->SetClassName(String::NewSymbol("Avro"));
   target->Set(String::NewSymbol("Avro"), a_temp->GetFunction());
 

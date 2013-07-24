@@ -7,8 +7,6 @@ namespace avronode {
  * destroy mutex and release the vector buffer
  */
 BufferedInputStream::~BufferedInputStream(){
-  pthread_mutex_destroy(&lock);
-  data_.clear();
 }
 
 /**
@@ -18,19 +16,26 @@ BufferedInputStream::~BufferedInputStream(){
  * @return      [description]
  */
 bool BufferedInputStream::next(const uint8_t** data, size_t* len) {
-  //pthread_mutex_lock(&lock);
   pthread_mutex_lock(&lock);
-  pthread_cond_wait( &cond, &lock);
-  int n = data_.size();
-
-  *data = data_.data() + cur_;
-  *len = (n - cur_);
-  cur_ = n;
-
+  if(data_.totalLength == 0){
+    pthread_cond_wait( &cond, &lock);
+    if(!read_){
+      return false;
+    }
+  }
+  //*len = 1 ;
+  //data_.readData(const_cast<uint8_t**>(data),0,1);
+  *len = data_.readBlock(const_cast<uint8_t**>(data));
 
   pthread_mutex_unlock(&lock);
-
   return true;
+}
+
+/**
+ * 
+ */
+long BufferedInputStream::size(){
+  return data_.totalLength;
 }
 
 /**
@@ -47,11 +52,21 @@ void BufferedInputStream::backup(size_t len) {
  * @param len [description]
  */
 void BufferedInputStream::append(uint8_t* in , int len) {
+  //printf(" we're writting\n");
   pthread_mutex_lock( &lock);
-  data_.insert(data_.end(), in, in+len);
-  if(len != 0){
-    pthread_cond_signal( &cond );
-  }
+  data_.appendData(in, 0, len);
+
+  pthread_cond_signal( &cond );
+  
+  pthread_mutex_unlock( &lock);
+}
+
+void BufferedInputStream::close(){
+  pthread_mutex_lock( &lock);
+  read_ = false;
+
+  pthread_cond_signal( &cond );
+  
   pthread_mutex_unlock( &lock);
 }
 
@@ -68,7 +83,6 @@ void BufferedInputStream::skip(size_t len) {
  * @return [description]
  */
 size_t BufferedInputStream::byteCount() const {
-  printf("byte count\n");
   return cur_;
 }
 

@@ -1,8 +1,5 @@
 var fs = require('fs');
 var addon = require('../build/Release/avro');
-var WebSocketClient = require('websocket').client;
-
-var client = new WebSocketClient();
 
 var Buffer = require('buffer').Buffer;
 
@@ -14,6 +11,7 @@ avro.onerror = function(error){
 
 avro.ondatum = function(datum){
   console.log("onDatum",datum);
+  avro.close();
 };
 
 var jsonSchema = '{\
@@ -50,15 +48,10 @@ var jsonSchema = '{\
     }\
   ]}';
 
-avro.queueSchema(jsonSchema,
-  function(datum){
-    console.log(datum);
-  },
-  function(error){
-    console.log(error);
-  });
+avro.queueSchema(jsonSchema);
 
-fs.open("./data.bin", 'r', function(status, fd) {
+
+fs.open("data.bin", 'r', function(status, fd) {
   fs.fstat(fd,function(err, stats){
     var i=0;
     var s=stats.size;
@@ -74,7 +67,6 @@ var buf=function(fs,fd,i,s,buffer){
   if(i+buffer.length<s){
     fs.read(fd,buffer,0,buffer.length,i,function(e,l,b){
       avro.push(b.slice(0,l));
-
       i=i+buffer.length;
       setTimeout(function(){
         buf(fs,fd,i,s,buffer);
@@ -82,7 +74,8 @@ var buf=function(fs,fd,i,s,buffer){
     });
   }else{
     fs.read(fd,buffer,0,buffer.length,i,function(e,l,b){
-      avro.push(b.slice(0,l));
+      var section = b.slice(0,l);
+      avro.push(section);
       fs.close(fd);
     });
   }

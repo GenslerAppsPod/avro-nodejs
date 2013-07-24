@@ -3,6 +3,7 @@
 /**
  * converts a GenericDatum into a v8 object that can be passed back to javascript
  * @param datum [Turning the avro GenericDatum into a v8 object that we can pass back to javascript]
+ * @return returns the v8 object that can be used by javascript.
  */
 v8::Handle<v8::Value> DecodeAvro(const avro::GenericDatum& datum){
   v8::Handle<v8::Object> obj = v8::Object::New();
@@ -23,29 +24,34 @@ v8::Handle<v8::Value> DecodeAvro(const avro::GenericDatum& datum){
         return obj;
       }
     case avro::AVRO_STRING:
-      return  v8::String::New(
-        datum.value<std::string>().c_str(),
-        datum.value<std::string>().size()
-      );
+      {
+        return  v8::String::New(
+          datum.value<std::string>().c_str(),
+          datum.value<std::string>().size()
+        );
+      } 
     case avro::AVRO_BYTES:
       {
         v8::Local<v8::Array> byteArray = v8::Array::New();
         const std::vector<uint8_t> &v = datum.value<std::vector<uint8_t> >();
-        for(int i = 0;i<v.size();i++){
+        for(size_t i = 0;i<v.size();i++){
           byteArray->Set(i, v8::Uint32::New(v[i]));
         }
         return byteArray;
       }        
     case avro::AVRO_INT:
-      return v8::Number::New(datum.value<int>());
+      return v8::Number::New(datum.value<int32_t>());
     case avro::AVRO_LONG:
-      return v8::Number::New(datum.value<long>());
+      return v8::Number::New(datum.value<int64_t>());
     case avro::AVRO_FLOAT:
       return v8::Number::New(datum.value<float>());
     case avro::AVRO_DOUBLE:
       return v8::Number::New(datum.value<double>());
     case avro::AVRO_BOOL:
-      return v8::Boolean::New(datum.value<bool>());
+    {
+      v8::Handle<v8::Boolean> boolVal = v8::Boolean::New(datum.value<bool>());
+      return boolVal;
+    }
     case avro::AVRO_NULL:
       return v8::Null();
     case avro::AVRO_ARRAY:
@@ -80,8 +86,6 @@ v8::Handle<v8::Value> DecodeAvro(const avro::GenericDatum& datum){
         }
         return datumArray;
       }
-    //Unimplemented avro types
-    case avro::AVRO_UNION:
 
     case avro::AVRO_FIXED:
       {
@@ -89,14 +93,24 @@ v8::Handle<v8::Value> DecodeAvro(const avro::GenericDatum& datum){
         v8::Local<v8::Array> fixedBytes = v8::Array::New();
         const avro::GenericFixed &genFixed = datum.value<avro::GenericFixed>();
         const std::vector<uint8_t> &v = genFixed.value();
-        for(int i = 0;i<v.size();i++){
+        for(size_t i = 0;i<v.size();i++){
           fixedBytes->Set(i, v8::Uint32::New(v[i]));
         }
         return fixedBytes;
       }
+    case avro::AVRO_ENUM:
+      {
+        const avro::GenericEnum &genEnum = datum.value<avro::GenericEnum>();
+        int32_t enumVal = genEnum.value();
+        return v8::Number::New(enumVal);
+      }
+
+    //Unimplemented avro types
     case avro::AVRO_SYMBOLIC:
 
     case avro::AVRO_UNKNOWN:
+
+    case avro::AVRO_UNION:
 
     default:
       {
@@ -208,7 +222,7 @@ avro::GenericDatum DecodeV8(avro::GenericDatum datum, v8::Local<v8::Value> objec
         avro::GenericDatum mapped(node->leafAt(1));
         v8::Local<v8::Array> propertyNames = map->GetPropertyNames();
         std::vector < std::pair < std::string, avro::GenericDatum > > &v = genMap.value();;
-        for(int i = 0;i<propertyNames->Length();i++){
+        for(size_t i = 0;i<propertyNames->Length();i++){
           v8::Local<v8::String> key = propertyNames->Get(i)->ToString();
           v8::String::Utf8Value propertyName(key);
           std::pair<std::string, avro::GenericDatum> leaf(*propertyName, DecodeV8(mapped, map->Get(key)));
@@ -218,7 +232,19 @@ avro::GenericDatum DecodeV8(avro::GenericDatum datum, v8::Local<v8::Value> objec
 
         datum.value<avro::GenericMap>() = genMap;
       }
-      break;       
+      break;     
+    case avro::AVRO_ENUM:  
+      {
+        avro::GenericEnum &genEnum = datum.value<avro::GenericEnum>();
+        if(object->IsString()){
+          v8::String::Utf8Value avroString(object->ToString());
+          genEnum.set(*avroString);
+        }else{
+          genEnum.set(object->Int32Value());
+        }
+        datum.value<avro::GenericEnum>() = genEnum;
+      }
+      break;
 
     case avro::AVRO_FIXED:
       {
@@ -234,7 +260,6 @@ avro::GenericDatum DecodeV8(avro::GenericDatum datum, v8::Local<v8::Value> objec
       }
       break;
     //Unimplemented avro types
-    case avro::AVRO_ENUM:
 
     case avro::AVRO_SYMBOLIC:
 
@@ -257,7 +282,7 @@ avro::GenericDatum DecodeV8(avro::GenericDatum datum, v8::Local<v8::Value> objec
  * @param datum [pointer to the GenericDatum]
  * @param type  [The type of Union specified by the JSON]
  */
-void unionBranch(avro::GenericDatum *datum, char *type){
+void unionBranch(avro::GenericDatum *datum, const char *type){
   try{
 
     int branches = datum->unionBranch();

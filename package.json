@@ -1,12 +1,33 @@
 {
-  "name": "AvroNode",
-  "version": "0.0.2",
+  "name": "avronode",
+  "version": "0.0.35",
   "author": {
     "name": "Benjamin Metzger",
     "email": "benjamindmetzger@gmail.com"
   },
-
+  "main": "./build/Release/avro",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GenslerAppsPod/avro-nodejs.git"
+  },
   "dependencies": {
     "ws": "*"
-  }
+  },
+  "scripts": {
+    "install": "node-gyp rebuild",
+    "start": "node ./tests/server.js"
+  },
+  "gypfile": true,
+  "readme": "#Avro-Nodejs\n\nA wrapper for the c++ implemenation of Avro.\n\n#The Why\n\n  Javascript is a async callback world so the avro library should play in that world. I've also seen far too many partially completed avro javascript projects on github. \n\n#API\n\n###Avro sync\n\n  avro.encodeDatum(schema, value);\n\n  avro.decodeDatum(schema, Buffer);\n\n#####Example\n\tvar addon = require('../build/Release/avro');\n    var avro = new addon.Avro();\n    var bytes = avro.encodeDatum('\"double\"', 12345.89);\n    var result = avro.decodeDatum('\"double\"', new Buffer(bytes));\n\tavro.close();\n\nThe result will contain the value that we encoded.\n\n###Avro async\n\n  avro.queueSchema(schema, onSuccess, onError);\n\n  avro.push(Buffer);\n\n  Currently there is only async support for decoding avro. \n  The implementation is designed for the ability to queue multiple avro schemas to be\n  decoded with queueSchema(). The push() function pushes bytes to the stream being parsed in a none blocking manor.\n  On the completion the call backs are called. \n\n#####Example\n\tvar addon = require('../build/Release/avro');\n    var avro = new addon.Avro();\n    avro.queueSchema('{\"type\": \"map\", \"values\": \"bytes\"',\n      function(datum){\n        console.log(\"datum: \", datum);\n      },\n      function(error){\n        console.log(error);\n      });\n\n    avro.push(message.binarydata);//message as defined by some stream or websocket. \n\tavro.close();\n\n###Closing\n\nThe currently implementation is defined to keep getting input from queueSchema and push. So to close out the Avro object call.\n\t\t\n\t\tavro.close();\n\n#Build and run\n\nInstall Node.js.  There are various methods to install Node.js that vary from system to system.\nInformation on installing using package managers can be found at:\n<https://github.com/joyent/node/wiki/Installing-Node.js-via-package-manager>\nOther installation options can be found at: <http://nodejs.org/download/>\n\nInstall and build the Avro C++ project found here:\n<https://github.com/apache/avro>\n\nThe Avro C++ library is dependent on one or more Boost libraries, so you may need to install Boost\nbefore compiling Avro.\nOn Ubuntu, installing the package \"libboost-all-dev\" is known to work, though it may be possible to\ninstall with a smaller subset of the Boost libraries.\n\nSpecific build instructions for the C++ Avro library may be found in the \"PATH_TO_AVRO_CHECKOUT/lang/c++/README\" file.\nHowever, it seems that currently the documentation there is a little off.\nThe following has been known to work:\n\nExecute the following from within the \"PATH_TO_AVRO_CHECKOUT/lang/c++\" folder:\n\n    ./build.sh test\n\nIf all of the required dependencies are installed, that should configure and build the Node C++\nlibs and run the included tests.  This should be all that is needed for this step, and you should\nnow have a shiny new shared lib in the \"PATH_TO_AVRO_CHECKOUT/lang/c++/build\" folder (and a symlink named \"libavrocpp.so\"\npointing to it).\n\nIf desired, you can easily create a Debian package (or RPM if its your preferred package manager)\nusing checkinstall by executing the following:\n\n    sudo checkinstall \\\n                --install=no \\\n                --pkgname=\"avro-cpp\" \\\n                --pkgrelease=\"_avro version here_\" \\\n                --maintainer=\"_maintainer email here_\" \\\n                --addso=yes\n\nThen simply use dpkg to install the generated .deb package.\n\n    dpkg -i avro-cpp_VERSION_ARCH.deb\n\nNext, it may be necessary to update the paths in the \"binding.gyp\" file.  Simply edit the file and\nreplace paths in the following lines with appropriate paths:\n\n    'include_dirs': ['/usr/local/include'],\n\n    'ldflags': ['-Lavrocpp/lib'],\n    'libraries': ['avrocpp/lib/libavrocpp.so']\n\nFor example, if you built the Avro C++ libraries and installed under the prefix \"/usr/local\",\nyou would update the lines to the following:\n\n    'include_dirs': ['/usr/local/include'],\n\n    'ldflags': ['-L/usr/local/lib'],\n    'libraries': ['/usr/local/lib/libavrocpp.so']\n\nIf you don't already have them installed, there are several npm packages that are required to\nbuild, install and use the library.\n\nThe library its self does not require websockets but it is recommended for the async use case using\na websocket implementation (https://github.com/Worlize/WebSocket-Node),\nwhich can be installed via npm by running the following from the root folder of your avro-nodejs\nfolder:\n\n    npm install websocket\n\nTo build, you need the node package node-gyp:\n\n    sudo npm install -g node-gyp\n\nAfter you have all of the prerequisite packages installed, you can build avro-nodejs.\n\n    node-gyp configure build\n\nTests under the \"tests\" subfolder can then be run:\n\n    cd tests\n    node AvroSync.js\n\n\nCopyright (c) 2013 Gensler <ben@metzger.cc>\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n   http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.\n\n\n\n\n",
+  "readmeFilename": "README.md",
+  "description": "A wrapper for the c++ implemenation of Avro.",
+  "bugs": {
+    "url": "https://github.com/GenslerAppsPod/avro-nodejs/issues"
+  },
+  "_id": "avronode@0.0.35",
+  "dist": {
+    "shasum": "61e867ae2a9641406805f6e80e46ac94ca1c5ee9"
+  },
+  "_from": "avronode@0.0.35",
+  "_resolved": "https://registry.npmjs.org/avronode/-/avronode-0.0.35.tgz"
 }

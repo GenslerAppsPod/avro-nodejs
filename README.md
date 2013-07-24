@@ -15,10 +15,13 @@ A wrapper for the c++ implemenation of Avro.
   avro.decodeDatum(schema, Buffer);
 
 #####Example
-
+	var addon = require('../build/Release/avro');
     var avro = new addon.Avro();
-    var bytes = avro.encodeDatum('"float"', 12345.89);
-    avro.decodeDatum('"float"', new Buffer(bytes));
+    var bytes = avro.encodeDatum('"double"', 12345.89);
+    var result = avro.decodeDatum('"double"', new Buffer(bytes));
+	avro.close();
+
+The result will contain the value that we encoded.
 
 ###Avro async
 
@@ -32,7 +35,7 @@ A wrapper for the c++ implemenation of Avro.
   On the completion the call backs are called. 
 
 #####Example
-
+	var addon = require('../build/Release/avro');
     var avro = new addon.Avro();
     avro.queueSchema('{"type": "map", "values": "bytes"',
       function(datum){
@@ -43,6 +46,13 @@ A wrapper for the c++ implemenation of Avro.
       });
 
     avro.push(message.binarydata);//message as defined by some stream or websocket. 
+	avro.close();
+
+###Closing
+
+The currently implementation is defined to keep getting input from queueSchema and push. So to close out the Avro object call.
+		
+		avro.close();
 
 #Build and run
 
@@ -105,7 +115,8 @@ you would update the lines to the following:
 If you don't already have them installed, there are several npm packages that are required to
 build, install and use the library.
 
-The library itself requires the WebSocket-Node package (https://github.com/Worlize/WebSocket-Node),
+The library its self does not require websockets but it is recommended for the async use case using
+a websocket implementation (https://github.com/Worlize/WebSocket-Node),
 which can be installed via npm by running the following from the root folder of your avro-nodejs
 folder:
 
