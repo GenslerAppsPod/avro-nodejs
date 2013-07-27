@@ -91,7 +91,7 @@ Handle<Value> Avro::Close(const Arguments &args){
   HandleScope scope;
   Avro * ctx = ObjectWrap::Unwrap<Avro>(args.This());
   uv_mutex_lock(&ctx->queueLock_);
-  while(ctx->processQueue_.size() > 0){
+  while(!ctx->processQueue_.empty()){
     ctx->processQueue_.pop();
   }
   ctx->read_ = false;
