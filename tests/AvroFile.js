@@ -1,16 +1,21 @@
 var fs = require('fs');
 var addon = require('../build/Release/avro');
 
-var Buffer = require('buffer').Buffer;
-
-var avro = new addon.Avro();
-
-avro.decodeFile("test.bin",
-function(datum){
-  console.log(datum);
-},
-function(error){
-  console.log(error);
+describe("Avro File decoding", function() {
+  it("should return the datum contained in the file", function(done){
+    var avro = new addon.Avro();
+    var datumCount = 0;
+    avro.decodeFile("test.bin",
+      function(datum){
+		  expect(datum.im).toEqual(datumCount++);
+		  if(datumCount >= 99){
+			  avro.close();
+			  done();
+		  }
+		},
+		function(error){
+		  console.log(error);
+	    }
+	  );
+	});
 });
-avro.close();
-

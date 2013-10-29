@@ -1,8 +1,6 @@
 var fs = require('fs');
 var addon = require('../build/Release/avro');
 
-var Buffer = require('buffer').Buffer;
-
 var avro = new addon.Avro();
 
 avro.onerror = function(error){
@@ -103,51 +101,85 @@ var handshakeResponse = '{\
 var map = '{"type": "map","values": "bytes"}';
 // Some of the types supported
 // TODO finish off examples.
-var fixedResult = avro.decodeDatum(fixedExample, new Buffer(
-  avro.encodeDatum(fixedExample, { 
-      clientHash:  new Buffer([ 120, 231, 49, 2, 125, 143, 213, 14, 214, 66, 52, 11, 124, 154, 99, 179 ]),
-      clientProtocol: { string: "client"},
-      serverHash:  new Buffer([ 120, 231, 49, 2, 125, 143, 213, 14, 214, 66, 52, 11, 124, 154, 99, 179 ]),
-      meta: null
-  })
-));
 
-var handshakeResponseResult = avro.decodeDatum(handshakeResponse, new Buffer(
-  avro.encodeDatum(handshakeResponse, {
-    match: "CLIENT",
-    serverProtocol: null,
-    serverHash: null,
-    meta: null    
-  })
-));
-/*
-for(var i = 0;i<100;i++){
-  var avroLoop = new addon.Avro();
-  var complexUnionResult = avroLoop.decodeDatum(complexUnion, new Buffer(avroLoop.encodeDatum(complexUnion, { "A": {"x": {string: "a String"}}})));
-  console.log("complex union result: ",complexUnionResult);
-  avroLoop.close();
-}
-*/
+describe("Testing the sync encoding and decoding types", function(){
+  it("should encode decode complex union", function(){
+    var complexUnionResult = avro.decodeDatum(complexUnion,
+                               new Buffer(avro.encodeDatum(complexUnion, { "A": {"x": {string: "a String"}}})));
+    expect({x: 'a String'}).toEqual(complexUnionResult);
 
-var complexUnionResult = avro.decodeDatum(complexUnion, new Buffer(avro.encodeDatum(complexUnion, { "A": {"x": {string: "a String"}}})));
-var unionResult = avro.decodeDatum(union, new Buffer(avro.encodeDatum(union, { string: "we have a string"})));
-var mapResult = avro.decodeDatum(map, new Buffer(avro.encodeDatum(map, {sequence: new Buffer(avro.encodeDatum('"long"', 12345))})));
-var booleanResult = avro.decodeDatum('"boolean"', new Buffer(avro.encodeDatum('"boolean"', true )));
-var stringResult = avro.decodeDatum('"string"', new Buffer(avro.encodeDatum('"string"', "A string to parse" )));
-var complexResult = avro.decodeDatum(complexSchema, new Buffer(avro.encodeDatum(complexSchema, { id: { bytes: new Buffer([8,-85,-51,18,52]) }})));
-var longResult = avro.decodeDatum('"long"', new Buffer(avro.encodeDatum('"long"', 12345)));
+  });
 
-console.log("handshake result: ", handshakeResponseResult);
-console.log("complex union result: ",complexUnionResult);
-console.log("fixed result: ", fixedResult);
-console.log("union result: ", unionResult);
-console.log("boolean result: ", booleanResult);
-console.log("map result: ", mapResult);
-console.log("long result: ", longResult);
-console.log("string result: ", stringResult);
-console.log("complex result: ", complexResult);
+  it("should encode decode a map", function(){
+    var mapResult = avro.decodeDatum(map,
+                      new Buffer(avro.encodeDatum(map, {sequence: new Buffer(avro.encodeDatum('"long"', 12345))})));
+    expect({sequence: [242, 192, 1]}).toEqual(mapResult);
+  });
 
-//Since avro starts another thread in the background for reading data to stop node 
-// we need to send a kill to the process.
-avro.close();
-console.log("end of file");
+  it("should encode decode union", function(){
+    var unionResult = avro.decodeDatum(union, new Buffer(avro.encodeDatum(union, { string: "we have a string"})));
+    expect("we have a string").toEqual(unionResult);
+
+  });
+
+  it("should encode decode boolean", function(){
+    var booleanResult = avro.decodeDatum('"boolean"', new Buffer(avro.encodeDatum('"boolean"', true )));
+    expect(true).toEqual(booleanResult);
+
+  });
+
+  it("should encode decode long", function(){
+    var longResult = avro.decodeDatum('"long"', new Buffer(avro.encodeDatum('"long"', 12345)));
+    expect(12345).toEqual(longResult);
+
+  });
+
+  it("should encode decode string", function(){
+    var stringResult = avro.decodeDatum('"string"', new Buffer(avro.encodeDatum('"string"', "A string to parse" )));
+    expect("A string to parse").toEqual(stringResult);
+
+  });
+
+  it("should encode decode fixed", function(){
+
+    var fixedResult = avro.decodeDatum(fixedExample, new Buffer(
+      avro.encodeDatum(fixedExample, { 
+          clientHash:  new Buffer([ 120, 231, 49, 2, 125, 143, 213, 14, 214, 66, 52, 11, 124, 154, 99, 179 ]),
+          clientProtocol: { string: "client"},
+          serverHash:  new Buffer([ 120, 231, 49, 2, 125, 143, 213, 14, 214, 66, 52, 11, 124, 154, 99, 179 ]),
+          meta: null
+      })
+    ));
+
+    expect(
+      { 
+        clientHash: [ 120, 231, 49, 2, 125, 143, 213, 14, 214, 66, 52,11, 124, 154, 99, 179 ],
+        clientProtocol: 'client',
+        serverHash: [ 120, 231, 49, 2, 125, 143, 213, 14, 214, 66, 52, 11, 124, 154, 99, 179 ],
+        meta: null 
+      }).toEqual(fixedResult);
+  });
+
+  it("should encode decode complex type", function(){
+    var complexResult = avro.decodeDatum(complexSchema, new Buffer(avro.encodeDatum(complexSchema, { id: { bytes: new Buffer([8,-85,-51,18,52]) }})));
+
+    expect({id: {bytes: [8, 171, 205, 18, 52]}}).toEqual(complexResult);
+
+  });
+
+  it("should encode deocde schema handshake", function(){
+    var handshakeResponseResult = avro.decodeDatum(handshakeResponse, new Buffer(
+      avro.encodeDatum(handshakeResponse, {
+        match: "CLIENT",
+        serverProtocol: null,
+        serverHash: null,
+        meta: null    
+      })
+    ));
+
+    expect({match: 1, serverProtocol: null, serverHash: null, meta: null}).toEqual(handshakeResponseResult);
+  });
+
+  avro.close();
+});
+

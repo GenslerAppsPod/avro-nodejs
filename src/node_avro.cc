@@ -11,12 +11,14 @@ using namespace avro;
 Persistent<String> on_schema;
 Persistent<String> on_datum;
 Persistent<String> on_error;
+Persistent<String> on_close;
 
 static void ResultEvent(uv_async_t *handle, int status);
 static void Process(uv_work_t* work_req);
 static void After(uv_work_t* work_req, int status);
 static void OnError(Avro *ctx, Persistent<Value> callback, const char* error);
 static void OnSchema(Avro *ctx, const char* schema);
+static void OnClose(Avro *ctx, Persistent<Value> callback);
 static void OnDatum(Avro *ctx, Persistent<Value> callback, Handle<Value> datum);
 void handleCallbacks(Avro *ctx, datumBaton *baton, const Arguments &args, int startPos);
 
@@ -104,6 +106,9 @@ Handle<Value> Avro::Close(const Arguments &args){
   
   //uv_loop_delete(ctx->avro_loop_);
   uv_run(ctx->avro_loop_, UV_RUN_DEFAULT); 
+
+  //fires off the on close event. 
+  OnClose(ctx, on_close);
   return scope.Close(Undefined());
 }
 
@@ -581,6 +586,24 @@ static void OnDatum(Avro *ctx, Persistent<Value> callback, Handle<Value> datum) 
 }
 
 /**
+ * [OnClose the callback to be called on the avro close]
+ * @param ctx      [description]
+ * @param callback [description]
+ */
+ static void OnClose(Avro *ctx, Persistent<Value> callback){
+
+    Local<Value> args[0] = {};
+
+    if(callback->IsFunction()){
+      MakeCallback(ctx->handle_, Persistent<Function>::Cast(callback), 0, args);
+    }else if(callback->IsString()){
+      MakeCallback(ctx->handle_,  Persistent<String>::Cast(callback), 0, args);
+    }else{
+      printf("close wtf\n");
+    }
+ } 
+
+/**
  * [Creates all of the possible calls from the javascript]
  * @param target [description]
  */
@@ -607,6 +630,7 @@ void Avro::Initialize(Handle<Object> target){
   on_schema = NODE_PSYMBOL("onschema");
   on_datum = NODE_PSYMBOL("ondatum");
   on_error = NODE_PSYMBOL("onerror");
+  on_close = NODE_PSYMBOL("onclose");
 
 }
 
