@@ -84,7 +84,7 @@ Handle<Value> AvroFileWriter::Write(const Arguments& args){
   Local<Value> jsDatum = args[0];
 
   GenericDatum datum(ctx->schema_);
-  DecodeV8(datum, jsDatum);
+  datum = DecodeV8(datum, jsDatum);
 
   ctx->writer_->write(datum); 
 
